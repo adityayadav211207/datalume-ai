@@ -1,0 +1,9 @@
+sample_notice,order_date,region,product_category,units,revenue,profit,rating
+SAMPLE DATA ONLY,2026-01-05,North,Accessories,12,420,98,4.5
+SAMPLE DATA ONLY,2026-01-12,South,Home,7,560,142,4.2
+SAMPLE DATA ONLY,2026-02-03,West,Accessories,18,630,151,4.7
+SAMPLE DATA ONLY,2026-02-14,East,Electronics,3,900,205,4.1
+SAMPLE DATA ONLY,2026-03-02,North,Home,10,800,220,4.6
+SAMPLE DATA ONLY,2026-03-18,South,Electronics,5,1500,340,4.8
+SAMPLE DATA ONLY,2026-04-04,West,Home,9,720,188,4.3
+SAMPLE DATA ONLY,2026-04-20,East,Accessories,14,490,117,4.4
