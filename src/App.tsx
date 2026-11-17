@@ -282,6 +282,8 @@ export default function App() {
             toggleTheme={toggleTheme}
             onOpenCommandPalette={() => setCommandPaletteOpen(true)}
             currentDataset={dataset}
+            sidebarCollapsed={sidebarCollapsed}
+            setSidebarCollapsed={setSidebarCollapsed}
           />
 
           <section className="content-area">

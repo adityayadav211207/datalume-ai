@@ -108,7 +108,7 @@ export function Sidebar({
 
         <button
           type="button"
-          className="sidebar-collapse-btn desktop-only"
+          className="sidebar-collapse-btn"
           onClick={() => setIsCollapsed(!isCollapsed)}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}

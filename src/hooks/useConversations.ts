@@ -30,7 +30,20 @@ export function useConversations(
   const sendChat = useCallback(
     async (question = chatInput) => {
       const value = question.trim()
-      if (!dataset || !value || chatBusy) return
+      if (!value || chatBusy) return
+      if (!dataset) {
+        setMessages(current => [
+          ...current,
+          { role: 'user', content: value },
+          {
+            role: 'assistant',
+            content:
+              'Please upload or select a dataset first (CSV or Excel). Once uploaded, I can calculate exact averages, totals, counts, comparisons, and insights directly from your data!',
+          },
+        ])
+        setChatInput('')
+        return
+      }
       setMessages(current => [...current, { role: 'user', content: value }])
       setChatInput('')
       setChatBusy(true)
@@ -70,11 +83,17 @@ export function useConversations(
         })
         setMessages(current => [...current, { role: 'assistant', content: answerText, facts }])
       } catch (error) {
+        const errorMsg =
+          error instanceof Error
+            ? error.message.includes('fetch') || error.message.includes('NetworkError')
+              ? 'Could not connect to the backend server. Please verify that the backend is running on http://localhost:8000.'
+              : error.message
+            : 'I could not answer that.'
         setMessages(current => [
           ...current,
           {
             role: 'assistant',
-            content: error instanceof Error ? error.message : 'I could not answer that.',
+            content: errorMsg,
           },
         ])
       } finally {

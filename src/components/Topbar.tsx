@@ -26,6 +26,8 @@ export function Topbar({
   onOpenCommandPalette,
   currentDataset,
   onOpenDatasetPicker,
+  sidebarCollapsed,
+  setSidebarCollapsed,
 }: {
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
@@ -40,15 +42,26 @@ export function Topbar({
   onOpenCommandPalette?: () => void
   currentDataset?: Dataset | null
   onOpenDatasetPicker?: () => void
+  sidebarCollapsed?: boolean
+  setSidebarCollapsed?: (collapsed: boolean) => void
 }) {
   return (
     <header className="topbar">
       <div className="topbar-left">
         <button
-          className="icon-button mobile-menu"
+          className="icon-button topbar-nav-toggle"
           type="button"
-          aria-label="Open navigation"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Toggle navigation"
+          title="Toggle sidebar"
+          onClick={() => {
+            if (window.innerWidth <= 640) {
+              setSidebarOpen(!sidebarOpen)
+            } else if (setSidebarCollapsed) {
+              setSidebarCollapsed(!sidebarCollapsed)
+            } else {
+              setSidebarOpen(!sidebarOpen)
+            }
+          }}
         >
           <Menu size={19} />
         </button>

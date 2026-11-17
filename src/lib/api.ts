@@ -49,53 +49,43 @@ export class ApiClient {
     return res
   }
 
-  upload(
+  async upload(
     path: string,
     formData: FormData,
     onProgress?: (pct: number) => void
   ): Promise<Response> {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', `${API_BASE}${path}`)
-      if (this.token) {
-        xhr.setRequestHeader('Authorization', `Bearer ${this.token}`)
+    // Signal progress start
+    if (onProgress) onProgress(0)
+
+    const headers: Record<string, string> = {}
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`
+
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+
+      if (onProgress) onProgress(100)
+
+      if (res.ok) {
+        return res
       }
 
-      xhr.upload.onprogress = event => {
-        if (event.lengthComputable && onProgress) {
-          const percent = Math.round((event.loaded / event.total) * 100)
-          onProgress(percent)
-        }
-      }
-
-      xhr.onload = () => {
-        const response = new Response(xhr.responseText, {
-          status: xhr.status,
-          statusText: xhr.statusText,
-        })
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(response)
-        } else {
-          try {
-            const body = JSON.parse(xhr.responseText)
-            const detail = typeof body.detail === 'string' ? body.detail : 'Upload failed'
-            if (this.onError) this.onError(detail)
-            reject(new ApiError(detail, xhr.status))
-          } catch {
-            const msg = `Upload failed with status ${xhr.status}`
-            if (this.onError) this.onError(msg)
-            reject(new ApiError(msg, xhr.status))
-          }
-        }
-      }
-
-      xhr.onerror = () => {
-        const msg = 'Network error during upload'
-        if (this.onError) this.onError(msg)
-        reject(new ApiError(msg, 0))
-      }
-
-      xhr.send(formData)
-    })
+      // Handle error responses
+      const body = await res.json().catch(() => ({}))
+      const detail =
+        typeof body.detail === 'string'
+          ? body.detail
+          : `Upload failed with status ${res.status}`
+      if (this.onError) this.onError(detail)
+      throw new ApiError(detail, res.status)
+    } catch (err) {
+      if (err instanceof ApiError) throw err
+      const msg = 'Network error during upload'
+      if (this.onError) this.onError(msg)
+      throw new ApiError(msg, 0)
+    }
   }
 }

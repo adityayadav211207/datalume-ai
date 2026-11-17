@@ -22,11 +22,16 @@ frontend_origins = [
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=frontend_origins,
+    allow_origins=frontend_origins + [
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5174",
+        "http://localhost:5174",
+    ],
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 DATASETS: dict[str, dict[str, Any]] = {}
 DASHBOARDS: dict[str, dict[str, Any]] = {}
@@ -165,10 +170,14 @@ async def upload_dataset(file: UploadFile = File(...), user: dict[str, str] = De
     if not content or len(content) > MAX_BYTES:
         raise HTTPException(413, f"File must be non-empty and no larger than {MAX_BYTES // (1024 * 1024)} MB.")
     mime = (file.content_type or "").lower()
-    allowed_mimes = {"text/csv", "application/csv", "application/vnd.ms-excel",
-                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                     "application/octet-stream", "text/plain"}
-    if mime not in allowed_mimes:
+    allowed_mimes = {
+        "text/csv", "application/csv", "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/octet-stream", "text/plain", "text/x-csv",
+        "application/x-csv", "text/comma-separated-values", "application/excel",
+        "application/x-excel", ""
+    }
+    if mime and mime not in allowed_mimes and not any(k in mime for k in ("csv", "excel", "sheet", "text", "octet-stream")):
         raise HTTPException(415, "The declared content type is not supported.")
     if extension == "xlsx" and not content.startswith(b"PK\x03\x04"):
         raise HTTPException(400, "The file does not have a valid XLSX signature.")
