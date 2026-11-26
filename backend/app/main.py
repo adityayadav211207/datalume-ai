@@ -155,6 +155,42 @@ async def load_owned_dataset(dataset_id: str, user: dict[str, str]) -> dict[str,
 
 
 async def persist_upload(user: dict[str, str], dataset_id: str, name: str, content: bytes, file_type: str, details: dict[str, Any]) -> None:
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_PUBLISHABLE_KEY")
+    if not url or not key:
+        return None
+    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+    storage_path = f"{user['id']}/{dataset_id}/{name}"
+    async with httpx.AsyncClient(timeout=30) as client:
+        # 1. Upload file to Supabase storage bucket user-datasets
+        try:
+            mime = "text/csv" if file_type == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            upload_headers = {**headers, "Content-Type": mime, "x-upsert": "true"}
+            await client.post(
+                f"{url.rstrip('/')}/storage/v1/object/user-datasets/{storage_path}",
+                content=content,
+                headers=upload_headers,
+            )
+        except Exception:
+            pass
+
+        # 2. Insert record in datasets table
+        try:
+            record = {
+                "id": dataset_id,
+                "user_id": user["id"],
+                "name": name,
+                "original_filename": name,
+                "file_type": file_type,
+                "storage_path": storage_path,
+            }
+            await client.post(
+                f"{url.rstrip('/')}/rest/v1/datasets",
+                json=record,
+                headers={**headers, "Prefer": "return=minimal"},
+            )
+        except Exception:
+            pass
     return None
 
 
