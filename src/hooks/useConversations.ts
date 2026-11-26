@@ -31,19 +31,7 @@ export function useConversations(
     async (question = chatInput) => {
       const value = question.trim()
       if (!value || chatBusy) return
-      if (!dataset) {
-        setMessages(current => [
-          ...current,
-          { role: 'user', content: value },
-          {
-            role: 'assistant',
-            content:
-              'Please upload or select a dataset first (CSV or Excel). Once uploaded, I can calculate exact averages, totals, counts, comparisons, and insights directly from your data!',
-          },
-        ])
-        setChatInput('')
-        return
-      }
+
       setMessages(current => [...current, { role: 'user', content: value }])
       setChatInput('')
       setChatBusy(true)
@@ -52,7 +40,7 @@ export function useConversations(
         if (!activeConversation) {
           const created = await api.request('/api/conversations', {
             method: 'POST',
-            body: JSON.stringify({ dataset_id: dataset.id, title: value.slice(0, 80) }),
+            body: JSON.stringify({ dataset_id: dataset?.id ?? null, title: value.slice(0, 80) }),
           })
           const conversation = await created.json()
           activeConversation = conversation.id
@@ -63,9 +51,16 @@ export function useConversations(
           method: 'POST',
           body: JSON.stringify({ role: 'user', content: value }),
         })
-        const response = await api.request(`/api/datasets/${dataset.id}/chat`, {
+
+        const endpoint = dataset ? `/api/datasets/${dataset.id}/chat` : '/api/chat'
+        const response = await api.request(endpoint, {
           method: 'POST',
-          body: JSON.stringify({ dataset_id: dataset.id, question: value, filters }),
+          body: JSON.stringify({
+            dataset_id: dataset?.id,
+            question: value,
+            filters,
+            conversation_id: activeConversation,
+          }),
         })
         const answer = await response.json()
         const answerText = normalizeChatContent(answer.answer ?? answer)

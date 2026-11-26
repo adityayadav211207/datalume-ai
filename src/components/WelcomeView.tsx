@@ -1,13 +1,18 @@
 import type { useDropzone } from 'react-dropzone'
 import {
-  Check,
+  ArrowRight,
   ChevronRight,
   Database,
   FileSpreadsheet,
+  Layers,
+  Plus,
   ShieldCheck,
+  Sparkles,
   UploadCloud,
+  Workflow,
 } from 'lucide-react'
 import type { Dataset } from '../lib/types'
+import { GlassCard } from './ui'
 
 export function WelcomeView({
   dropzone,
@@ -22,137 +27,194 @@ export function WelcomeView({
   onSelect: (item: Dataset) => void
   onOpenUpload: () => void
 }) {
+  void [Database, onOpenUpload]
+
   return (
-    <div className="welcome-view">
-      <div className="welcome-intro">
-        <div className="eyebrow">
-          <span className="eyebrow-dot" /> YOUR PERSONAL ANALYTICS STUDIO
+    <div className="welcome-view-premium">
+      {/* 1. DATA PIPELINE SECTION (TOP) */}
+      <section className="pipeline-container" aria-label="Data Pipeline Workflow">
+        <div className="pipeline-header">
+          <div className="pipeline-header-icon-wrap">
+            <Workflow size={22} className="pipeline-header-icon" />
+          </div>
+          <div>
+            <h2 className="pipeline-heading">Data Pipeline</h2>
+            <p className="pipeline-subtitle">
+              From raw data to actionable insights — a complete, automated workflow.
+            </p>
+          </div>
         </div>
-        <h1>
-          Turn Your Data
-          <br />
-          Into <em>Decisions.</em>
+
+        <div className="pipeline-flow">
+          {/* Stage 01 — Upload Your Data */}
+          <div className="pipeline-card">
+            <div className="pipeline-icon">
+              <UploadCloud size={28} />
+            </div>
+            <div className="pipeline-card-content">
+              <div className="pipeline-card-header">
+                <span className="pipeline-step-num">01</span>
+                <h3 className="pipeline-step-title">Upload Your Data</h3>
+              </div>
+              <p className="pipeline-step-desc">Upload CSV, XLSX, or XLS file.</p>
+            </div>
+          </div>
+
+          {/* Minimalist Orange Connecting Arrow */}
+          <div className="pipeline-arrow-container" aria-hidden="true">
+            <ArrowRight size={22} className="pipeline-arrow" />
+          </div>
+
+          {/* Stage 02 — Automatic Profiling */}
+          <div className="pipeline-card">
+            <div className="pipeline-icon">
+              <Layers size={28} />
+            </div>
+            <div className="pipeline-card-content">
+              <div className="pipeline-card-header">
+                <span className="pipeline-step-num">02</span>
+                <h3 className="pipeline-step-title">Automatic Profiling</h3>
+              </div>
+              <p className="pipeline-step-desc">
+                Analyze structure, data types, missing values, and key statistics.
+              </p>
+            </div>
+          </div>
+
+          {/* Minimalist Orange Connecting Arrow */}
+          <div className="pipeline-arrow-container" aria-hidden="true">
+            <ArrowRight size={22} className="pipeline-arrow" />
+          </div>
+
+          {/* Stage 03 — Ask Lumi AI */}
+          <div className="pipeline-card">
+            <div className="pipeline-icon">
+              <Sparkles size={28} />
+            </div>
+            <div className="pipeline-card-content">
+              <div className="pipeline-card-header">
+                <span className="pipeline-step-num">03</span>
+                <h3 className="pipeline-step-title">Ask Lumi AI</h3>
+              </div>
+              <p className="pipeline-step-desc">
+                Get intelligent insights, trends, and recommendations.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. WELCOME HEADING & DESCRIPTION */}
+      <div className="welcome-header-section">
+        <div className="welcome-eyebrow">
+          <span className="eyebrow-accent-dot" /> ENTERPRISE ANALYTICS WORKSPACE
+        </div>
+        <h1 className="welcome-headline">
+          Welcome to <span className="welcome-brand-text">DataLume AI</span>
         </h1>
-        <p>Upload a dataset, ask better questions, and find the details that move your work forward.</p>
-        <button className="button-primary" type="button" onClick={onOpenUpload}>
-          <UploadCloud size={17} /> Upload a dataset
-        </button>
-        <span className="welcome-note">
-          <ShieldCheck size={14} /> Private by design. Yours alone.
-        </span>
+        <p className="welcome-subtext">
+          Connect your data to begin uncovering actionable insights, intelligent column profiling, and
+          AI-driven analytics.
+        </p>
       </div>
-      <div
+
+      {/* 3. DATASET DRAG-AND-DROP UPLOAD CONTAINER */}
+      <GlassCard
+        className={`welcome-drop-card glass-card ${dropzone.isDragActive ? 'drop-active' : ''}`}
+        padding="lg"
         {...dropzone.getRootProps()}
-        className={`welcome-drop ${dropzone.isDragActive ? 'drop-active' : ''}`}
       >
         <input {...dropzone.getInputProps()} />
-        <span className="drop-icon">
-          <UploadCloud size={23} />
-        </span>
-        <strong>
-          {busy
-            ? 'Analyzing your dataset...'
-            : dropzone.isDragActive
-            ? 'Drop it right here'
-            : 'Drop a file to begin'}
-        </strong>
-        <span>
-          CSV, XLSX or XLS <i /> UP TO 25 MB
-        </span>
-        <button
-          type="button"
-          onClick={event => {
-            event.stopPropagation()
-            dropzone.open()
-          }}
-        >
-          Browse files <ChevronRight size={14} />
-        </button>
-        <div className="drop-formats">
-          <FileSpreadsheet size={16} />
-          <span>CSV</span>
-          <span className="format-sep">/</span>
-          <span>XLSX</span>
-          <span className="format-sep">/</span>
-          <span>XLS</span>
+        <div className="drop-center-content">
+          <div className="drop-icon-orb">
+            <UploadCloud size={30} className="upload-icon" />
+          </div>
+
+          <h2 className="drop-main-prompt">
+            {busy
+              ? 'Analyzing and profiling dataset...'
+              : dropzone.isDragActive
+              ? 'Drop file here to upload'
+              : 'Drag & drop your dataset here'}
+          </h2>
+
+          <p className="drop-limits-text">
+            Supports <strong className="limit-format">CSV</strong>,{' '}
+            <strong className="limit-format">XLSX</strong>, or{' '}
+            <strong className="limit-format">XLS</strong> files up to 25 MB
+          </p>
+
+          <button
+            type="button"
+            className="browse-files-btn"
+            disabled={busy}
+            onClick={event => {
+              event.stopPropagation()
+              dropzone.open()
+            }}
+          >
+            <Plus size={15} /> Browse Files
+          </button>
+
+          {/* 4. SUPPORTED FILE FORMATS AND SECURITY INFO */}
+          <div className="format-pills-row">
+            <span className="format-pill">
+              <FileSpreadsheet size={13} /> CSV
+            </span>
+            <span className="format-pill">
+              <FileSpreadsheet size={13} /> XLSX
+            </span>
+            <span className="format-pill">
+              <FileSpreadsheet size={13} /> XLS
+            </span>
+            <span className="security-pill">
+              <ShieldCheck size={13} /> Local & In-Memory Analysis
+            </span>
+          </div>
         </div>
-      </div>
-      <div className="welcome-lower">
-        <section className="welcome-recent">
-          <div className="section-label">
-            <span>RECENT DATASETS</span>
-            <span className="section-rule" />
-            <span className="recent-count">{datasets.length}</span>
+      </GlassCard>
+
+      {/* 5. RECENT DATASETS QUICK-ACCESS (IF ANY EXIST) */}
+      {datasets && datasets.length > 0 && (
+        <GlassCard className="welcome-recent-card glass-card" padding="md">
+          <div className="panel-heading">
+            <div>
+              <div className="panel-kicker">AVAILABLE IN WORKSPACE</div>
+              <h2>Previous Datasets ({datasets.length})</h2>
+            </div>
           </div>
-          {datasets.length ? (
-            <div className="recent-list">
-              {datasets.slice(0, 4).map(item => (
-                <button
-                  type="button"
-                  className="recent-row"
+          <div className="recent-datasets-grid">
+            {datasets.slice(0, 4).map(item => {
+              const ext = item.name.split('.').pop()?.toUpperCase() || 'CSV'
+              return (
+                <div
                   key={item.id}
+                  className="recent-dataset-item"
                   onClick={() => onSelect(item)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => e.key === 'Enter' && onSelect(item)}
                 >
-                  <span className="recent-file-icon">
-                    <FileSpreadsheet size={17} />
-                  </span>
-                  <span className="recent-file-meta">
-                    <strong>{item.name}</strong>
-                    <small>
-                      {item.metadata.row_count.toLocaleString()} records <i />{' '}
-                      {item.metadata.column_count} fields
-                    </small>
-                  </span>
-                  <span className="recent-time">READY</span>
-                  <ChevronRight size={15} />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="recent-empty">
-              <Database size={19} />
-              <span>Your datasets will appear here once you upload a file.</span>
-            </div>
-          )}
-        </section>
-        <section className="quick-start">
-          <div className="section-label">
-            <span>YOUR FIRST ANALYSIS</span>
+                  <div className="recent-item-left">
+                    <span className="recent-ext-badge">{ext}</span>
+                    <div className="recent-item-meta">
+                      <strong>{item.name}</strong>
+                      <span>
+                        {item.metadata.row_count.toLocaleString()} rows · {item.metadata.column_count} fields
+                      </span>
+                    </div>
+                  </div>
+                  <div className="recent-item-right">
+                    <span className="switch-prompt">
+                      Restore <ChevronRight size={13} />
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
-          <div className="quick-step">
-            <span>01</span>
-            <div>
-              <strong>Upload a dataset</strong>
-              <small>Start with a CSV or spreadsheet.</small>
-            </div>
-            <Check size={15} />
-          </div>
-          <div className="quick-step">
-            <span>02</span>
-            <div>
-              <strong>Review what matters</strong>
-              <small>We’ll profile columns, gaps and metrics.</small>
-            </div>
-            <span className="step-line" />
-          </div>
-          <div className="quick-step">
-            <span>03</span>
-            <div>
-              <strong>Ask Lumi AI</strong>
-              <small>Explore your dataset in plain language.</small>
-            </div>
-            <span className="step-line" />
-          </div>
-        </section>
-      </div>
-      <div className="welcome-decoration">
-        <span />
-        <span />
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
+        </GlassCard>
+      )}
     </div>
   )
 }

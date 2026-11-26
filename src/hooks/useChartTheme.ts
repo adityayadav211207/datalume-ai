@@ -11,12 +11,12 @@ export function useChartTheme(explicitTheme?: Theme) {
 
   return useMemo(() => {
     if (activeTheme === 'midnight') {
-      const accent = '#ff9f43'
-      const teal = '#2dd4bf'
-      const violet = '#a78bfa'
-      const amber = '#fbbf24'
-      const rose = '#f87171'
-      const accentDeep = '#f47721'
+      const accent = '#FF7518'
+      const teal = '#22C55E'
+      const violet = '#60A5FA'
+      const amber = '#F59E0B'
+      const rose = '#EF4444'
+      const accentDeep = '#FF8C42'
       return {
         accent,
         teal,
@@ -24,12 +24,12 @@ export function useChartTheme(explicitTheme?: Theme) {
         amber,
         rose,
         primary: accent,
-        muted: '#8e8e9e',
-        grid: 'rgba(255, 255, 255, 0.10)',
-        fill: 'rgba(255, 159, 67, 0.20)',
-        tooltipBg: '#1e2235',
-        tooltipBorder: 'rgba(255, 255, 255, 0.16)',
-        sparkline: 'rgba(255, 159, 67, 0.8)',
+        muted: '#737373',
+        grid: 'rgba(255, 255, 255, 0.06)',
+        fill: 'rgba(255, 117, 24, 0.15)',
+        tooltipBg: '#1C1C1C',
+        tooltipBorder: 'rgba(255, 255, 255, 0.10)',
+        sparkline: 'rgba(255, 117, 24, 0.8)',
         colors: [accent, teal, violet, amber, rose, accentDeep] as const,
       }
     }

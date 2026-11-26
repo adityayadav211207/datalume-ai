@@ -6,12 +6,17 @@ import uuid
 from pathlib import PurePosixPath
 from typing import Any
 
+from dotenv import load_dotenv
+load_dotenv()
+load_dotenv("backend/.env")
+
 import httpx
 import pandas as pd
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from .ai import answer_with_lumi
 from .analytics import answer_question, filtered, kpis, metadata, statistics
 
 app = FastAPI(title="DataLume AI API", version="1.0.0")
@@ -49,9 +54,10 @@ class QueryRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    dataset_id: str
+    dataset_id: str | None = None
     question: str = Field(min_length=1, max_length=1000)
     filters: dict[str, Any] = Field(default_factory=dict)
+    conversation_id: str | None = None
 
 
 class ChartRequest(BaseModel):
@@ -371,7 +377,41 @@ async def query_dataset(dataset_id: str, request: QueryRequest, user: dict[str, 
 async def chat_dataset(dataset_id: str, request: ChatRequest, user: dict[str, str] = Depends(current_user)) -> dict[str, Any]:
     dataset = await load_owned_dataset(dataset_id, user)
     frame = filtered(dataset["frame"], request.filters)
-    return answer_question(frame, request.question)
+    history: list[dict[str, str]] = []
+    if request.conversation_id:
+        raw_msgs = MESSAGES.get(request.conversation_id, [])
+        history = [{"role": m.get("role", "user"), "content": str(m.get("content", ""))} for m in raw_msgs]
+    return await answer_with_lumi(
+        question=request.question,
+        frame=frame,
+        dataset_name=dataset.get("name") or dataset.get("original_filename"),
+        history=history,
+    )
+
+
+@app.post("/api/chat")
+async def chat_general(request: ChatRequest, user: dict[str, str] = Depends(current_user)) -> dict[str, Any]:
+    frame = None
+    dataset_name = None
+    if request.dataset_id:
+        try:
+            dataset = await load_owned_dataset(request.dataset_id, user)
+            frame = filtered(dataset["frame"], request.filters)
+            dataset_name = dataset.get("name") or dataset.get("original_filename")
+        except Exception:
+            pass
+
+    history: list[dict[str, str]] = []
+    if request.conversation_id:
+        raw_msgs = MESSAGES.get(request.conversation_id, [])
+        history = [{"role": m.get("role", "user"), "content": str(m.get("content", ""))} for m in raw_msgs]
+
+    return await answer_with_lumi(
+        question=request.question,
+        frame=frame,
+        dataset_name=dataset_name,
+        history=history,
+    )
 
 
 @app.post("/api/datasets/{dataset_id}/export")

@@ -38,7 +38,7 @@ import { FilterBar } from './components/FilterBar'
 import { ChatPanel } from './components/ChatPanel'
 import { CommandPalette } from './components/CommandPalette'
 
-import { OverviewPage } from './pages/OverviewPage'
+import { OverviewPage, OverviewSkeleton } from './pages/OverviewPage'
 import { UploadPage } from './pages/UploadPage'
 import { ExplorerPage } from './pages/ExplorerPage'
 import { VisualizationPage } from './pages/VisualizationPage'
@@ -109,7 +109,7 @@ export default function App() {
     shell.setActivePage('Overview')
   }, [shell])
 
-  const datasets = useDatasets(api, toast.showNotice, handleNavigateOverview)
+  const datasets = useDatasets(api, toast.showNotice, handleNavigateOverview, auth.userEmail)
 
   const conversations = useConversations(
     api,
@@ -257,6 +257,7 @@ export default function App() {
           datasets={datasets.datasets}
           dataset={dataset}
           selectDataset={datasets.selectDataset}
+          onDeleteDataset={item => datasets.removeDataset(item.id)}
           search={datasets.search}
           conversations={conversations.conversations}
           conversationId={conversations.conversationId}
@@ -326,8 +327,12 @@ export default function App() {
                 onClearPreview={datasets.clearUploadPreview}
                 onNavigate={shell.setActivePage}
               />
+            ) : datasets.restoring ? (
+              <OverviewSkeleton />
             ) : dataset ? (
               <>
+                {shell.activePage !== 'Overview' && (
+                  <>
                 <div className="page-heading">
                   <div>
                     <div className="eyebrow">
@@ -437,6 +442,9 @@ export default function App() {
                   />
                 )}
 
+                  </>
+                )}
+
                 {shell.activePage === 'Data Explorer' ? (
                   <ExplorerPage
                     rows={datasets.rows}
@@ -480,6 +488,10 @@ export default function App() {
                     showNotice={toast.showNotice}
                     onNavigate={shell.setActivePage}
                     onStateChange={setOverviewState}
+                    datasets={datasets.datasets}
+                    onSelectDataset={datasets.selectDataset}
+                    onRefresh={datasets.refreshDataset}
+                    isRefreshing={datasets.busy}
                   />
                 )}
               </>

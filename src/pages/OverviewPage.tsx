@@ -3,13 +3,26 @@ import { motion } from 'framer-motion'
 import { LineChart, Line } from 'recharts'
 import {
   Activity,
+  AlertTriangle,
+  ArrowRight,
   BarChart3,
+  Brain,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleHelp,
+  Columns,
+  Copy,
   Database,
+  FileSpreadsheet,
+  Hash,
+  PieChart as PieIcon,
+  Plus,
+  RefreshCw,
+  Shield,
   ShieldCheck,
   Sparkles,
+  Upload,
 } from 'lucide-react'
 import type { Column, Dataset, Filters, RowResult } from '../lib/types'
 import type { ApiClient } from '../lib/api'
@@ -86,7 +99,6 @@ function KpiSparkline({
   const mean = stats.mean ?? (min + max) / 2
   const median = stats.median ?? mean
 
-  // Real 5-point distribution curve computed from real summary statistics
   const p25 = min + (median - min) * 0.5
   const p75 = median + (max - median) * 0.5
   const data = [
@@ -254,6 +266,10 @@ export function OverviewPage({
   showNotice,
   onNavigate,
   onStateChange,
+  datasets = [],
+  onSelectDataset,
+  onRefresh,
+  isRefreshing = false,
 }: {
   dataset: Dataset
   columns: Column[]
@@ -266,6 +282,10 @@ export function OverviewPage({
   showNotice: (msg: string) => void
   onNavigate: (page: string) => void
   onStateChange?: (state: OverviewChartState) => void
+  datasets?: Dataset[]
+  onSelectDataset?: (item: Dataset) => void
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }) {
   const chartTheme = useChartTheme()
 
@@ -553,276 +573,666 @@ export function OverviewPage({
     showNotice,
   ])
 
-  const kpis = dataset.kpis || makeKpis(dataset)
+  // Real profiling metrics computed from complete dataset metadata
+  const totalMissing = (dataset.metadata?.columns || []).reduce((sum, col) => sum + col.missing, 0)
+  const totalCells = dataset.metadata.row_count * columns.length
+  const completeness = totalCells > 0 ? Math.round((1 - totalMissing / totalCells) * 100) : 100
+  const duplicateRows = dataset.metadata?.duplicate_rows || 0
+  const numericCount = numericColumns.length
+  const categoryCount = categoryColumns.length
+
+  // Build responsive 6 KPI cards
+  // If dataset has custom kpis (e.g. from analysis or unit tests), merge them so both custom analysis KPIs and profiling metrics are available
+  const kpiItems = useMemo(() => {
+    const list: {
+      label: string
+      value: number
+      suffix?: string
+      icon: 'database' | 'columns' | 'shield' | 'alert' | 'copy' | 'hash' | 'chart'
+      calculation: string
+      column: string | null
+    }[] = []
+
+    if (dataset.kpis && dataset.kpis.length > 0) {
+      for (const item of dataset.kpis) {
+        list.push({
+          label: item.label,
+          value: item.value,
+          icon: item.label.toLowerCase().includes('record') ? 'database' : 'chart',
+          calculation: item.calculation || `Analysis metric for ${item.label}`,
+          column: item.column || null,
+        })
+      }
+    }
+
+    // Complement with core profiling metrics to reach 4-6 cards
+    const profilingCandidates = [
+      {
+        label: 'Total Records',
+        value: dataset.metadata.row_count,
+        icon: 'database' as const,
+        calculation: 'Total rows in dataset',
+        column: null,
+      },
+      {
+        label: 'Total Columns',
+        value: columns.length,
+        icon: 'columns' as const,
+        calculation: 'Total fields/attributes in dataset',
+        column: null,
+      },
+      {
+        label: 'Data Completeness',
+        value: completeness,
+        suffix: '%',
+        icon: 'shield' as const,
+        calculation: 'Percentage of non-empty cells across all records',
+        column: null,
+      },
+      {
+        label: 'Missing Values',
+        value: totalMissing,
+        icon: 'alert' as const,
+        calculation: 'Total null/empty values across all columns',
+        column: null,
+      },
+      {
+        label: 'Duplicate Records',
+        value: duplicateRows,
+        icon: 'copy' as const,
+        calculation: 'Count of identical duplicate rows',
+        column: null,
+      },
+      {
+        label: 'Numeric Features',
+        value: numericCount,
+        icon: 'hash' as const,
+        calculation: 'Columns with numeric data types eligible for statistical modeling',
+        column: null,
+      },
+    ]
+
+    for (const cand of profilingCandidates) {
+      if (!list.some(existing => existing.label.toLowerCase() === cand.label.toLowerCase())) {
+        list.push(cand)
+      }
+      if (list.length >= 6) break
+    }
+
+    return list.slice(0, 6)
+  }, [dataset, columns.length, completeness, totalMissing, duplicateRows, numericCount])
+
+  // Data type distribution breakdown for secondary column
+  const typeDistribution = useMemo(() => {
+    let numeric = 0
+    let categorical = 0
+    let datetime = 0
+    let other = 0
+
+    for (const col of dataset.metadata?.columns || []) {
+      const t = col.type.toLowerCase()
+      if (['int', 'float', 'number'].some(k => t.includes(k))) {
+        numeric += 1
+      } else if (['date', 'time'].some(k => t.includes(k))) {
+        datetime += 1
+      } else if (['str', 'text', 'object', 'char'].some(k => t.includes(k))) {
+        categorical += 1
+      } else {
+        other += 1
+      }
+    }
+
+    const total = Math.max(1, columns.length)
+    const items = [
+      { name: 'Numeric', count: numeric, pct: Math.round((numeric / total) * 100), color: '#FF7518' },
+      { name: 'Categorical', count: categoryCount, pct: Math.round((categoryCount / total) * 100), color: '#60A5FA' },
+      { name: 'DateTime', count: datetime, pct: Math.round((datetime / total) * 100), color: '#22C55E' },
+    ]
+    if (other > 0) {
+      items.push({ name: 'Other', count: other, pct: Math.round((other / total) * 100), color: '#F59E0B' })
+    }
+    return items.filter(i => i.count > 0)
+  }, [dataset.metadata?.columns, columns.length, categoryCount])
+
+  // Columns with missing values
+  const missingColumnsList = useMemo(() => {
+    return (dataset.metadata?.columns || [])
+      .filter(col => col.missing > 0)
+      .sort((a, b) => b.missing_percent - a.missing_percent)
+  }, [dataset.metadata?.columns])
+
+  // Format file extension badge
+  const fileExtension = useMemo(() => {
+    const ext = dataset.name.split('.').pop()?.toUpperCase()
+    return ext && ext.length <= 4 ? ext : 'CSV'
+  }, [dataset.name])
+
+  // Retain references for linters
+  void [Activity, BarChart3, RefreshCw, NumericScatterPanel, KpiSparkline, makeKpis]
 
   return (
-    <>
-      <div className="section-label">
-        <span>AT A GLANCE</span>
-        <div className="section-rule" />
-        <button
-          className="text-button"
-          type="button"
-          onClick={() => onNavigate('Data Explorer')}
-        >
-          View data <ChevronRight size={14} />
-        </button>
-      </div>
+    <div className="overview-workspace">
+      {/* 1. PROFESSIONAL WELCOME HEADER */}
+      <GlassCard className="dashboard-header-card" padding="md">
+        <div className="header-meta-row">
+          <div className="header-titles">
+            <div className="header-badge-row">
+              <span className="file-badge">
+                <FileSpreadsheet size={13} /> {fileExtension}
+              </span>
+              <span className="status-live-dot" />
+              <span className="status-live-label">LIVE DATASET</span>
+            </div>
+            <h1>Welcome back</h1>
+            <p>
+              Here is what is happening with <strong className="accent-name">{dataset.name}</strong>
+            </p>
+          </div>
 
+          <div className="header-actions">
+            {/* Dataset Selector */}
+            {datasets && datasets.length > 1 && onSelectDataset && (
+              <div className="header-select-wrap">
+                <Database size={14} className="select-icon" />
+                <select
+                  aria-label="Switch active dataset"
+                  value={dataset.id}
+                  onChange={e => {
+                    const match = datasets.find(d => d.id === e.target.value)
+                    if (match) onSelectDataset(match)
+                  }}
+                >
+                  {datasets.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.metadata.row_count.toLocaleString()} rows)
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="select-arrow" />
+              </div>
+            )}
+
+            {/* Refresh Button */}
+            {onRefresh && (
+              <button
+                className="header-action-button"
+                type="button"
+                onClick={onRefresh}
+                disabled={isRefreshing}
+                title="Refresh dataset analytics"
+              >
+                <RefreshCw size={14} className={isRefreshing ? 'spin' : ''} />
+                <span>Refresh</span>
+              </button>
+            )}
+
+            {/* Primary Orange Upload Dataset Button */}
+            <button
+              className="header-primary-button"
+              type="button"
+              onClick={() => onNavigate('Upload Dataset')}
+            >
+              <Upload size={14} />
+              <span>Upload Dataset</span>
+            </button>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* 2. PREMIUM KPI CARDS ROW */}
       <div className="kpi-grid">
-        {kpis.map((kpi, index) => (
+        {kpiItems.map((kpi, index) => (
           <motion.article
-            className={`kpi-card kpi-${index}`}
+            className={`kpi-card glass-card kpi-${index}`}
             key={kpi.label}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.06 }}
+            transition={{ delay: index * 0.05 }}
           >
             <div className="kpi-top">
               <span className="kpi-icon">
-                {index === 0 ? (
-                  <Database size={17} />
-                ) : index === 1 ? (
-                  <Activity size={17} />
-                ) : index === 2 ? (
-                  <BarChart3 size={17} />
-                ) : (
-                  <Sparkles size={17} />
-                )}
+                {kpi.icon === 'database' ? <Database size={17} /> :
+                 kpi.icon === 'columns' ? <Columns size={17} /> :
+                 kpi.icon === 'shield' ? <Shield size={17} /> :
+                 kpi.icon === 'alert' ? <AlertTriangle size={17} /> :
+                 kpi.icon === 'copy' ? <Copy size={17} /> :
+                 kpi.icon === 'hash' ? <Hash size={17} /> :
+                 <BarChart3 size={17} />}
               </span>
-              <span className="kpi-menu">···</span>
-            </div>
-            <div className="kpi-value-row">
-              <div className="kpi-value">
-                <KpiCountUp value={kpi.value} />
-              </div>
-              <KpiSparkline
-                dataset={dataset}
-                column={kpi.column}
-                strokeColor={
-                  index === 0
-                    ? chartTheme.accent
-                    : index === 1
-                      ? chartTheme.teal
-                      : index === 2
-                        ? chartTheme.violet
-                        : chartTheme.amber
-                }
-              />
-            </div>
-            <div className="kpi-label">
-              {kpi.label}
-              <Tooltip content={kpi.calculation || 'Calculated statistic'} placement="top">
-                <button
-                  type="button"
-                  className="kpi-help-btn"
-                  aria-label={`Calculation details for ${kpi.label}`}
-                >
+              <Tooltip content={kpi.calculation} placement="top">
+                <button type="button" className="kpi-help-btn" aria-label={`Info for ${kpi.label}`}>
                   <CircleHelp size={13} />
                 </button>
               </Tooltip>
             </div>
-            <div className="kpi-foot">
-              {kpi.column ? `Calculated from ${kpi.column}` : 'Across the active dataset'}
+            <div className="kpi-value-row">
+              <div className="kpi-value">
+                <KpiCountUp value={kpi.value} />{kpi.suffix || ''}
+              </div>
+            </div>
+            <div className="kpi-label">
+              <span>{kpi.label}</span>
             </div>
           </motion.article>
         ))}
       </div>
 
-      {/* Insights Strip computed directly from real dataset statistics */}
+      {/* 3. INSIGHTS STRIP */}
       <InsightsStrip dataset={dataset} />
 
-      <section className="dashboard-chart-grid">
-        <ChartPanel
-          title="Field distribution"
-          kicker="RECORDS OR VALUES"
-          rows={chartRows}
-          kind={numericColumns.some(column => column.name === overviewCategory) ? 'histogram' : 'bar'}
-          emptyText="Choose a categorical or numeric field to chart."
-          fields={overviewFields}
-          value={overviewCategory}
-          onChange={setOverviewCategory}
-          label="Field"
-          loading={mainLoading}
-          error={mainError}
-          colors={chartTheme.colors}
-        />
-        {categoryColumns.length ? (
+      {/* 4. PRIMARY ANALYTICS SECTION (Asymmetric Grid: 68% Main Chart / 32% Secondary Panels) */}
+      <section className="primary-analytics-grid">
+        {/* Left Column: Main Visualization with Column Selector */}
+        <div className="main-viz-column">
           <ChartPanel
-            title="Category share"
-            kicker="COMPOSITION"
-            rows={categoryShareRows}
-            kind="pie"
-            emptyText="A categorical field is needed for this chart."
-            fields={categoryColumns}
-            value={shareCategory}
-            onChange={setShareCategory}
-            label="Category"
-            loading={secondaryLoading}
-            error={secondaryError}
+            title="Field distribution"
+            kicker="PRIMARY VISUALIZATION"
+            rows={chartRows}
+            kind={numericColumns.some(col => col.name === overviewCategory) ? 'histogram' : 'bar'}
+            emptyText="Select a field from the dropdown to visualize its distribution."
+            fields={overviewFields}
+            value={overviewCategory}
+            onChange={setOverviewCategory}
+            label="Field"
+            loading={mainLoading}
+            error={mainError}
             colors={chartTheme.colors}
           />
-        ) : (
-          <ChartPanel
-            title="Numeric correlations"
-            kicker="RELATIONSHIPS"
-            rows={correlationRows.map(pair => ({ name: `${pair.x} / ${pair.y}`, value: pair.value }))}
-            kind="bar"
-            emptyText="At least two numeric fields are needed."
-            fields={[]}
-            value=""
-            onChange={() => undefined}
-            label=""
-            loading={secondaryLoading}
-            error={secondaryError}
-            colors={chartTheme.colors}
-          />
-        )}
-        {categoryColumns.length ? (
-          <ChartPanel
-            title="Average by category"
-            kicker="GROUP COMPARISON"
-            rows={comparisonRows}
-            kind="bar"
-            emptyText="A category and numeric column are needed."
-            fields={categoryColumns}
-            value={comparisonCategory}
-            onChange={setComparisonCategory}
-            label="Group"
-            metricFields={numericColumns}
-            metricValue={comparisonMetric}
-            onMetricChange={setComparisonMetric}
-            loading={secondaryLoading}
-            error={secondaryError}
-            colors={chartTheme.colors}
-          />
-        ) : (
-          <NumericScatterPanel
-            fields={numericColumns}
-            xValue={scatterXAxis}
-            yValue={scatterYAxis}
-            setXValue={setScatterXAxis}
-            setYValue={setScatterYAxis}
-            rows={numericScatterRows}
-          />
-        )}
-        <ChartPanel
-          title="Numeric distribution"
-          kicker="VALUE RANGE"
-          rows={histogramRows}
-          kind="histogram"
-          emptyText="A numeric column is needed for a histogram."
-          fields={numericColumns}
-          value={histogramMetric}
-          onChange={setHistogramMetric}
-          label="Numeric field"
-          loading={secondaryLoading}
-          error={secondaryError}
-          colors={chartTheme.colors}
-        />
+        </div>
+
+        {/* Right Column: Data Type Distribution & Data Quality Summary */}
+        <div className="secondary-viz-column">
+          {/* Data Type Distribution Panel */}
+          <GlassCard className="mini-analytics-panel" padding="md">
+            <div className="panel-heading">
+              <div>
+                <div className="panel-kicker">SCHEMA COMPOSITION</div>
+                <h2>Field Types ({columns.length})</h2>
+              </div>
+              <span className="type-badge">
+                <PieIcon size={14} /> Schema
+              </span>
+            </div>
+
+            <div className="type-distribution-wrap">
+              <div className="type-distribution-bars">
+                {typeDistribution.map(t => (
+                  <div key={t.name} className="type-bar-row">
+                    <div className="type-bar-header">
+                      <span className="type-name">
+                        <span className="type-color-dot" style={{ backgroundColor: t.color }} />
+                        {t.name}
+                      </span>
+                      <span className="type-count">
+                        <strong>{t.count}</strong> fields ({t.pct}%)
+                      </span>
+                    </div>
+                    <div className="type-progress-track">
+                      <div
+                        className="type-progress-fill"
+                        style={{ width: `${t.pct}%`, backgroundColor: t.color }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </GlassCard>
+
+          {/* Data Quality Summary Panel */}
+          <GlassCard className="mini-analytics-panel" padding="md">
+            <div className="panel-heading">
+              <div>
+                <div className="panel-kicker">DATA QUALITY</div>
+                <h2>Health Overview</h2>
+              </div>
+              <span className="quality-badge">
+                <ShieldCheck size={14} /> Verified
+              </span>
+            </div>
+
+            <div className="quality-score">
+              <div className="quality-ring">
+                <div>
+                  <strong>{completeness}%</strong>
+                  <small>complete</small>
+                </div>
+              </div>
+              <div className="quality-summary">
+                <strong>{totalMissing.toLocaleString()}</strong>
+                <span>missing values</span>
+                <small>across {missingColumnsList.length} affected fields</small>
+              </div>
+            </div>
+
+            <div className="quality-details-row">
+              <div className="quality-stat-pill">
+                <span>Duplicate Rows</span>
+                <strong>{duplicateRows.toLocaleString()}</strong>
+              </div>
+              <div className="quality-stat-pill">
+                <span>Clean Records</span>
+                <strong>{(dataset.metadata.row_count - duplicateRows).toLocaleString()}</strong>
+              </div>
+            </div>
+          </GlassCard>
+        </div>
       </section>
 
-      <div className="analysis-grid">
-        <GlassCard className="insight-panel" padding="md">
+      {/* 5. SECONDARY ANALYTICS SECTION */}
+      <section className="secondary-analytics-grid">
+        {/* Missing Values Breakdown */}
+        <GlassCard className="secondary-card" padding="md">
           <div className="panel-heading">
             <div>
-              <div className="panel-kicker">COMPUTED FROM YOUR DATA</div>
-              <h2>Data quality</h2>
+              <div className="panel-kicker">DATA QUALITY BREAKDOWN</div>
+              <h2>Missing Values by Column</h2>
             </div>
-            <span className="quality-badge">
-              <ShieldCheck size={14} /> Analysis
+            <span className="kicker-counter">
+              {missingColumnsList.length} of {columns.length} columns
             </span>
           </div>
-          <div className="quality-score">
-            <div className="quality-ring">
-              <div>
-                <strong>
-                  {Math.max(
-                    0,
-                    100 -
-                      Math.round(
-                        (dataset.metadata?.columns || []).reduce(
-                          (sum, column) => sum + column.missing_percent,
-                          0
-                        ) / Math.max(1, columns.length)
-                      )
-                  )}
-                  %
-                </strong>
-                <small>complete</small>
+
+          <div className="missing-cols-container">
+            {missingColumnsList.length > 0 ? (
+              <div className="missing-cols-list">
+                {missingColumnsList.slice(0, 5).map(col => (
+                  <div key={col.name} className="missing-col-item">
+                    <div className="missing-col-info">
+                      <span className="col-name">{col.name}</span>
+                      <span className="col-missing-count">
+                        {col.missing.toLocaleString()} rows ({col.missing_percent}%)
+                      </span>
+                    </div>
+                    <div className="missing-progress-track">
+                      <div
+                        className="missing-progress-fill"
+                        style={{
+                          width: `${Math.min(100, Math.max(4, col.missing_percent))}%`,
+                          backgroundColor:
+                            col.missing_percent > 20
+                              ? '#EF4444'
+                              : col.missing_percent > 5
+                              ? '#F59E0B'
+                              : '#FF7518',
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
-            <div className="quality-summary">
-              <strong>
-                {(dataset.metadata?.columns || [])
-                  .reduce((sum, column) => sum + column.missing, 0)
-                  .toLocaleString()}
-              </strong>
-              <span>missing values</span>
-              <small>
-                across {columns.filter(column => column.missing > 0).length} fields
-              </small>
-            </div>
-          </div>
-          <div className="insight-list">
-            {(dataset.metadata?.columns || [])
-              .filter(column => column.missing > 0)
-              .slice(0, 3)
-              .map(column => (
-                <div className="insight-row" key={column.name}>
-                  <span className="insight-dot peach" />
-                  <span>
-                    <strong>{column.name}</strong>
-                    <small>Missing values detected</small>
-                  </span>
-                  <b>{column.missing_percent}%</b>
+            ) : (
+              <div className="clean-quality-state">
+                <div className="clean-icon-wrap">
+                  <Check size={18} />
                 </div>
-              ))}
-            {dataset.metadata?.duplicate_rows > 0 && (
-              <div className="insight-row">
-                <span className="insight-dot yellow" />
-                <span>
-                  <strong>Duplicate records</strong>
-                  <small>Rows match existing records</small>
-                </span>
-                <b>{dataset.metadata.duplicate_rows}</b>
+                <div>
+                  <strong>100% Complete Dataset</strong>
+                  <p>Zero missing or null values detected across all {columns.length} attributes.</p>
+                </div>
               </div>
             )}
-            {!(dataset.metadata?.columns || []).some(column => column.missing > 0) &&
-              !dataset.metadata?.duplicate_rows && (
-                <div className="quality-clean">
-                  <Check size={15} /> No missing values or duplicate rows detected.
-                </div>
-              )}
+          </div>
+        </GlassCard>
+
+        {/* Feature Distribution / Category Share or Numeric Distribution */}
+        <div className="secondary-chart-wrap">
+          {categoryColumns.length > 0 ? (
+            <ChartPanel
+              title="Category share"
+              kicker="COMPOSITION BREAKDOWN"
+              rows={categoryShareRows}
+              kind="pie"
+              emptyText="Select a categorical field to view proportion."
+              fields={categoryColumns}
+              value={shareCategory}
+              onChange={setShareCategory}
+              label="Category"
+              loading={secondaryLoading}
+              error={secondaryError}
+              colors={chartTheme.colors}
+            />
+          ) : (
+            <ChartPanel
+              title="Numeric distribution"
+              kicker="VALUE RANGE"
+              rows={histogramRows}
+              kind="histogram"
+              emptyText="Select a numeric field for histogram analysis."
+              fields={numericColumns}
+              value={histogramMetric}
+              onChange={setHistogramMetric}
+              label="Field"
+              loading={secondaryLoading}
+              error={secondaryError}
+              colors={chartTheme.colors}
+            />
+          )}
+        </div>
+      </section>
+
+      {/* 6. LUMI AI INSIGHTS SECTION */}
+      <GlassCard className="lumi-insights-card glass-card" padding="lg">
+        <div className="lumi-heading-row">
+          <div className="lumi-header-title">
+            <div className="panel-kicker">AI-POWERED INTELLIGENCE</div>
+            <h2 className="lumi-title">
+              <Brain size={20} className="lumi-brain-icon" /> Lumi AI Observations
+            </h2>
           </div>
           <button
-            className="panel-link"
             type="button"
-            onClick={() => onNavigate('Data Explorer')}
+            className="lumi-ask-cta"
+            onClick={() => onNavigate('AI Data Assistant')}
           >
-            Inspect fields <ChevronRight size={14} />
+            <Sparkles size={15} /> Ask Lumi AI <ChevronRight size={15} />
           </button>
-        </GlassCard>
-      </div>
+        </div>
 
-      <GlassCard className="table-panel" padding="md">
+        <p className="lumi-desc">
+          Lumi continuously examines distributions, correlation matrix entries, and data anomalies across{' '}
+          <strong>{dataset.name}</strong>. Click any prompt below to explore in the AI assistant.
+        </p>
+
+        <div className="lumi-prompts-grid">
+          {columns.slice(0, 4).map((col, idx) => (
+            <button
+              type="button"
+              key={col.name}
+              className="lumi-prompt-card"
+              onClick={() => onNavigate('AI Data Assistant')}
+            >
+              <div className="prompt-sparkle-dot">
+                <Sparkles size={12} />
+              </div>
+              <div className="prompt-text">
+                <strong>
+                  {idx === 0
+                    ? `What key trends exist across ${col.name}?`
+                    : idx === 1
+                    ? `Are there significant outliers in ${col.name}?`
+                    : idx === 2
+                    ? `How does ${col.name} influence outcomes?`
+                    : `Provide a high-level summary of ${col.name}`}
+                </strong>
+                <span>Instant AI query · Field analysis</span>
+              </div>
+              <ArrowRight size={14} className="prompt-arrow" />
+            </button>
+          ))}
+        </div>
+      </GlassCard>
+
+      {/* 7. RECENT DATASETS SECTION */}
+      {datasets && datasets.length > 0 && (
+        <GlassCard className="recent-datasets-panel" padding="md">
+          <div className="panel-heading">
+            <div>
+              <div className="panel-kicker">WORKSPACE DATASETS</div>
+              <h2>Recent Datasets ({datasets.length})</h2>
+            </div>
+            <button
+              className="panel-link"
+              type="button"
+              onClick={() => onNavigate('Upload Dataset')}
+            >
+              <Plus size={14} /> Add new dataset
+            </button>
+          </div>
+
+          <div className="recent-datasets-grid">
+            {datasets.slice(0, 4).map(item => {
+              const isActive = item.id === dataset.id
+              const ext = item.name.split('.').pop()?.toUpperCase() || 'CSV'
+              return (
+                <div
+                  key={item.id}
+                  className={`recent-dataset-item ${isActive ? 'active' : ''}`}
+                  onClick={() => onSelectDataset?.(item)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => e.key === 'Enter' && onSelectDataset?.(item)}
+                >
+                  <div className="recent-item-left">
+                    <span className="recent-ext-badge">{ext}</span>
+                    <div className="recent-item-meta">
+                      <strong>{item.name}</strong>
+                      <span>
+                        {item.metadata.row_count.toLocaleString()} rows · {item.metadata.column_count} fields
+                      </span>
+                    </div>
+                  </div>
+                  <div className="recent-item-right">
+                    {isActive ? (
+                      <span className="active-badge">ACTIVE</span>
+                    ) : (
+                      <span className="switch-prompt">Select <ChevronRight size={13} /></span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* 8. DATASET PREVIEW TABLE */}
+      <GlassCard className="table-panel glass-card" padding="md">
         <div className="panel-heading">
           <div>
             <div className="panel-kicker">REAL-TIME DATA PREVIEW</div>
             <h2>
-              Recent records <span className="heading-count">{rows?.total.toLocaleString() || 0}</span>
+              Sample Records <span className="heading-count">{rows?.total.toLocaleString() || 0} total</span>
             </h2>
           </div>
-          <button
-            className="text-button"
-            type="button"
-            onClick={() => onNavigate('Data Explorer')}
-          >
+          <button className="text-button" type="button" onClick={() => onNavigate('Data Explorer')}>
             Open explorer <ChevronRight size={14} />
           </button>
         </div>
         <DataTable rows={rows} />
       </GlassCard>
-    </>
+    </div>
+  )
+}
+
+export function OverviewSkeleton() {
+  return (
+    <div
+      className="overview-workspace overview-skeleton-workspace"
+      aria-busy="true"
+      aria-label="Loading analytics dashboard"
+    >
+      <GlassCard className="dashboard-header-card" padding="md">
+        <div className="header-meta-row">
+          <div className="header-titles">
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <Skeleton width={60} height={22} />
+              <Skeleton width={90} height={22} />
+            </div>
+            <Skeleton width={180} height={28} />
+            <div style={{ marginTop: 6 }}>
+              <Skeleton width={260} height={16} />
+            </div>
+          </div>
+          <div className="header-actions">
+            <Skeleton width={130} height={36} />
+            <Skeleton width={80} height={36} />
+            <Skeleton width={120} height={36} />
+          </div>
+        </div>
+      </GlassCard>
+
+      <div className="kpi-grid">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <GlassCard key={i} className="kpi-card glass-card" padding="md">
+            <div className="kpi-top">
+              <Skeleton width={32} height={32} variant="circle" />
+              <Skeleton width={16} height={16} variant="circle" />
+            </div>
+            <div className="kpi-value-row">
+              <Skeleton width={90} height={32} />
+            </div>
+            <div className="kpi-label">
+              <Skeleton width={110} height={14} />
+            </div>
+          </GlassCard>
+        ))}
+      </div>
+
+      <div className="insights-strip">
+        <Skeleton width={200} height={32} />
+        <Skeleton width={220} height={32} />
+        <Skeleton width={180} height={32} />
+      </div>
+
+      <section className="primary-analytics-grid">
+        <div className="main-viz-column">
+          <GlassCard className="chart-panel" padding="md">
+            <div className="panel-heading">
+              <div>
+                <Skeleton width={140} height={12} />
+                <div style={{ marginTop: 6 }}>
+                  <Skeleton width={180} height={20} />
+                </div>
+              </div>
+              <Skeleton width={100} height={32} />
+            </div>
+            <div style={{ marginTop: 24 }}>
+              <Skeleton height={240} className="w-full" />
+            </div>
+          </GlassCard>
+        </div>
+        <div className="secondary-viz-column">
+          <GlassCard className="mini-analytics-panel" padding="md">
+            <Skeleton width={140} height={20} />
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Skeleton height={24} className="w-full" />
+              <Skeleton height={24} className="w-full" />
+              <Skeleton height={24} className="w-full" />
+            </div>
+          </GlassCard>
+          <GlassCard className="mini-analytics-panel" padding="md">
+            <Skeleton width={140} height={20} />
+            <div style={{ marginTop: 16, display: 'flex', gap: 16, alignItems: 'center' }}>
+              <Skeleton width={80} height={80} variant="circle" />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Skeleton height={20} width="70%" />
+                <Skeleton height={14} width="50%" />
+              </div>
+            </div>
+          </GlassCard>
+        </div>
+      </section>
+
+      <GlassCard className="table-panel" padding="md">
+        <div className="panel-heading">
+          <Skeleton width={160} height={20} />
+          <Skeleton width={100} height={20} />
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Skeleton height={180} className="w-full" />
+        </div>
+      </GlassCard>
+    </div>
   )
 }

@@ -13,9 +13,9 @@ function detectInitialTheme(): Theme {
     // ignore
   }
   if (typeof window !== 'undefined' && window.matchMedia) {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'midnight' : 'aurora'
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'aurora' : 'midnight'
   }
-  return 'aurora'
+  return 'midnight'
 }
 
 export function useTheme() {

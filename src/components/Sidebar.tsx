@@ -14,6 +14,7 @@ import {
   Plus,
   Settings,
   Sparkles,
+  Trash2,
   UploadCloud,
   UserRound,
   X,
@@ -31,6 +32,7 @@ export interface SidebarProps {
   datasets: Dataset[]
   dataset: Dataset | null
   selectDataset: (item: Dataset) => void
+  onDeleteDataset?: (item: Dataset) => void
   search: string
   conversations: Conversation[]
   conversationId: string | null
@@ -53,6 +55,7 @@ export function Sidebar({
   datasets,
   dataset,
   selectDataset,
+  onDeleteDataset,
   search,
   conversations,
   conversationId,
@@ -184,17 +187,36 @@ export function Sidebar({
             .filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
             .slice(0, 4)
             .map(item => (
-              <button
-                type="button"
-                className={`dataset-nav ${dataset?.id === item.id ? 'selected' : ''}`}
+              <div
+                className={`dataset-nav-row ${dataset?.id === item.id ? 'selected' : ''}`}
                 key={item.id}
-                onClick={() => selectDataset(item)}
               >
-                <span className="file-dot">
-                  <FileSpreadsheet size={14} />
-                </span>
-                <span className="truncate">{item.name}</span>
-              </button>
+                <button
+                  type="button"
+                  className={`dataset-nav ${dataset?.id === item.id ? 'selected' : ''}`}
+                  onClick={() => selectDataset(item)}
+                  title={item.name}
+                >
+                  <span className="file-dot">
+                    <FileSpreadsheet size={14} />
+                  </span>
+                  <span className="truncate">{item.name}</span>
+                </button>
+                {onDeleteDataset && (
+                  <button
+                    type="button"
+                    className="dataset-remove-btn"
+                    title={`Remove ${item.name}`}
+                    aria-label={`Remove dataset ${item.name}`}
+                    onClick={e => {
+                      e.stopPropagation()
+                      onDeleteDataset(item)
+                    }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
             ))}
           {!datasets.length && <p className="sidebar-empty">Your datasets will appear here</p>}
         </div>

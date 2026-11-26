@@ -24,6 +24,7 @@
   flex-direction: column;
   border-right: 1px solid var(--border-glass);
   background: var(--surface-1);
+  background: rgba(18, 18, 18, 0.95);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   z-index: var(--z-sidebar);
@@ -207,6 +208,51 @@
   margin-top: 24px;
 }
 
+.dataset-nav-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  position: relative;
+  transition: background var(--transition-fast);
+}
+
+.dataset-nav-row:hover,
+.dataset-nav-row.selected {
+  background: var(--surface-2);
+}
+
+.dataset-nav-row .dataset-nav {
+  min-width: 0;
+  flex: 1;
+}
+
+.dataset-remove-btn {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin-right: 6px;
+  border: 0;
+  color: var(--ink-faint);
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  opacity: 0;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.dataset-nav-row:hover .dataset-remove-btn,
+.dataset-remove-btn:focus-visible {
+  opacity: 1;
+}
+
+.dataset-remove-btn:hover {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
 .dataset-nav {
   width: 100%;
   display: flex;
@@ -226,7 +272,6 @@
 .dataset-nav:hover,
 .dataset-nav.selected {
   color: var(--accent-deep);
-  background: var(--surface-2);
 }
 
 .file-dot {
@@ -433,8 +478,8 @@
 }
 
 .topbar {
-  height: 58px;
-  flex: 0 0 58px;
+  height: 64px;
+  flex: 0 0 64px;
   position: sticky;
   top: 0;
   z-index: var(--z-topbar);
@@ -541,7 +586,7 @@
   max-width: 1390px;
   flex: 1;
   margin: 0 auto;
-  padding: 28px 36px 32px;
+  padding: 24px 32px 28px;
 }
 
 .app-footer {

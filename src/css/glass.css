@@ -3,13 +3,55 @@
   .kpi-card,
   .chart-panel,
   .insight-panel,
-  .settings-section {
-    background: var(--surface-1);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--border-glass);
-    box-shadow: var(--shadow-panel);
-    border-radius: var(--radius-panel);
+  .settings-section,
+  .glass-card {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.075) 0%,
+      rgba(255, 255, 255, 0.025) 45%,
+      rgba(255, 255, 255, 0.045) 100%
+    );
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 18px;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition:
+      transform 200ms ease,
+      border-color 200ms ease,
+      box-shadow 200ms ease;
+  }
+
+  .panel::before,
+  .kpi-card::before,
+  .chart-panel::before,
+  .insight-panel::before,
+  .settings-section::before,
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background: linear-gradient(
+      125deg,
+      transparent 15%,
+      rgba(255, 255, 255, 0.045) 40%,
+      transparent 65%
+    );
+  }
+
+  .glass-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255, 117, 24, 0.25);
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.35),
+      0 0 20px rgba(255, 117, 24, 0.035);
   }
 }
 
@@ -18,7 +60,8 @@
   .kpi-card,
   .chart-panel,
   .insight-panel,
-  .settings-section {
+  .settings-section,
+  .glass-card {
     background: var(--surface-fallback);
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-panel);
@@ -53,21 +96,21 @@
 
 .kpi-card {
   min-width: 0;
-  min-height: 128px;
-  padding: 13px 14px 11px;
+  min-height: 140px;
+  padding: 18px 20px 16px;
   transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
 }
 
 .kpi-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12), var(--shadow-panel);
+  transform: translateY(-3px);
+  border-color: rgba(255, 117, 24, 0.25);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), 0 0 20px rgba(255, 117, 24, 0.08), var(--shadow-panel);
 }
 
 .chart-panel,
 .insight-panel {
   min-height: 306px;
-  padding: var(--space-4) var(--space-4) var(--space-3);
+  padding: var(--space-5) var(--space-5) var(--space-4);
 }
 
 .settings-section {

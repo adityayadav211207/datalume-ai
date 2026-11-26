@@ -28,7 +28,7 @@ export function GlassCard({
 
   return (
     <div
-      className={`panel ui-card ${paddingClass} ${interactiveClass} ${glowClass} ${className}`.trim()}
+      className={`panel ui-card glass-card ${paddingClass} ${interactiveClass} ${glowClass} ${className}`.trim()}
       {...props}
     >
       {children}
