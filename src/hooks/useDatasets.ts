@@ -208,6 +208,7 @@ export function useDatasets(
       'text/csv': ['.csv'],
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'application/vnd.ms-excel': ['.xls'],
+      'application/pdf': ['.pdf'],
     },
     maxFiles: 1,
     disabled: busy,

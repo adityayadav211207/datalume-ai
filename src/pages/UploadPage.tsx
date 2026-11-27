@@ -154,6 +154,30 @@ export function UploadPage({
             </div>
           </div>
 
+          {/* PDF Document Summary / Table Selection if applicable */}
+          {lastUploadedDataset.pdf_info && (
+            <div className="preview-cols-section">
+              <div className="preview-section-title">
+                <Sparkles size={14} /> PDF Document Insights & Tables Detected
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.7)' }}>
+                  Type: <strong style={{ color: '#f97316' }}>{lastUploadedDataset.pdf_info.doc_type.replace('_', ' ').toUpperCase()}</strong> · Pages: <strong>{lastUploadedDataset.pdf_info.metadata.total_pages}</strong> · Words: <strong>{lastUploadedDataset.pdf_info.metadata.word_count.toLocaleString()}</strong> · Tables: <strong>{lastUploadedDataset.pdf_info.tables.length}</strong>
+                </div>
+                {lastUploadedDataset.pdf_info.tables.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {lastUploadedDataset.pdf_info.tables.map(tbl => (
+                      <span key={tbl.id} className="preview-col-pill" style={{ borderColor: 'rgba(249, 115, 22, 0.3)' }}>
+                        <span className="col-pill-name">{tbl.name}</span>
+                        <span className="col-pill-type type-num">{tbl.row_count} rows</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Action Navigation */}
           <div className="preview-actions">
             <button
@@ -264,6 +288,9 @@ export function UploadPage({
               </span>
               <span>
                 <Check size={13} /> XLS
+              </span>
+              <span>
+                <Check size={13} /> PDF
               </span>
               <i /> Max file size 25 MB
             </div>

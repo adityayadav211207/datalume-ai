@@ -6,9 +6,40 @@ export interface Column {
   unique: number
 }
 
+export interface PdfTableInfo {
+  id: string
+  name: string
+  page: number
+  row_count: number
+  column_count: number
+  columns: string[]
+  preview: Record<string, unknown>[]
+}
+
+export interface PdfDocumentInfo {
+  doc_type: 'structured_tables' | 'mixed_content' | 'text_document' | 'scanned_document'
+  metadata: {
+    title: string
+    author: string
+    subject: string
+    creator: string
+    producer: string
+    total_pages: number
+    processed_pages: number
+    word_count: number
+    has_scanned_pages: boolean
+    total_images: number
+  }
+  tables: PdfTableInfo[]
+  can_combine_tables: boolean
+  document_text_snippet?: string
+}
+
 export interface Dataset {
   id: string
   name: string
+  file_type?: string
+  pdf_info?: PdfDocumentInfo
   metadata: {
     row_count: number
     column_count: number

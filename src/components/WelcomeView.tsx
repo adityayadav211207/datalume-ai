@@ -56,7 +56,7 @@ export function WelcomeView({
                 <span className="pipeline-step-num">01</span>
                 <h3 className="pipeline-step-title">Upload Your Data</h3>
               </div>
-              <p className="pipeline-step-desc">Upload CSV, XLSX, or XLS file.</p>
+              <p className="pipeline-step-desc">Upload CSV, XLSX, XLS, or PDF files.</p>
             </div>
           </div>
 
@@ -76,7 +76,7 @@ export function WelcomeView({
                 <h3 className="pipeline-step-title">Automatic Profiling</h3>
               </div>
               <p className="pipeline-step-desc">
-                Analyze structure, data types, missing values, and key statistics.
+                Extract tables, identify data types, analyze missing values, and process document content.
               </p>
             </div>
           </div>
@@ -97,7 +97,7 @@ export function WelcomeView({
                 <h3 className="pipeline-step-title">Ask Lumi AI</h3>
               </div>
               <p className="pipeline-step-desc">
-                Get intelligent insights, trends, and recommendations.
+                Discover insights, generate summaries, visualize data, and ask questions about your documents.
               </p>
             </div>
           </div>
@@ -140,8 +140,9 @@ export function WelcomeView({
 
           <p className="drop-limits-text">
             Supports <strong className="limit-format">CSV</strong>,{' '}
-            <strong className="limit-format">XLSX</strong>, or{' '}
-            <strong className="limit-format">XLS</strong> files up to 25 MB
+            <strong className="limit-format">XLSX</strong>,{' '}
+            <strong className="limit-format">XLS</strong>, or{' '}
+            <strong className="limit-format">PDF</strong> files up to 25 MB
           </p>
 
           <button
@@ -166,6 +167,9 @@ export function WelcomeView({
             </span>
             <span className="format-pill">
               <FileSpreadsheet size={13} /> XLS
+            </span>
+            <span className="format-pill">
+              <FileSpreadsheet size={13} /> PDF
             </span>
             <span className="security-pill">
               <ShieldCheck size={13} /> Local & In-Memory Analysis

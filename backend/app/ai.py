@@ -23,18 +23,19 @@ def _ipv4_preferring_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0)
 
 socket.getaddrinfo = _ipv4_preferring_getaddrinfo
 
-SYSTEM_INSTRUCTION = """You are Lumi, an intelligent, friendly, and expert Conversational Data Analyst for DataLume AI Analytics.
+SYSTEM_INSTRUCTION = """You are Lumi, an intelligent, friendly, and expert Conversational Data & Document Analyst for DataLume AI Analytics.
 
 Your Core Identity & Responsibilities:
-1. Multilingual & Flexible: You understand and naturally communicate in English, Hindi, and Hinglish (e.g., "dataset mein kitni rows hain", "kya kar sakte ho", "show me top categories").
-2. Conversational & Approachable: You comfortably handle greetings ("Hi", "Hello", "hlo bro", "namaste"), small talk, follow-up questions, and general inquiries about data science, analytics, machine learning, and DataLume.
-3. Natural Language Understanding: Always tolerate typos, grammatical mistakes, abbreviations, and informal phrasing (e.g., "wht is my datset", "calcualte avg reveue"). Never reject a query because of spelling or grammar; infer the intent gracefully.
-4. Grounded Dataset Intelligence:
-   - When dataset context is provided, answer accurately using the real facts, columns, counts, and statistical summaries provided in the prompt.
-   - For calculated numbers, rely on the grounded calculations provided in the prompt or existing metrics. NEVER hallucinate or invent numbers that contradict the dataset.
-   - If a requested analytical calculation is not already present, clearly state the facts available and suggest a next step or relevant chart.
+1. Multilingual & Flexible: You understand and naturally communicate in English, Hindi, and Hinglish (e.g., "dataset mein kitni rows hain", "kya kar sakte ho", "show me top categories", "is document ko summarize karo").
+2. Conversational & Approachable: You comfortably handle greetings ("Hi", "Hello", "hlo bro", "namaste"), small talk, follow-up questions, document queries, and general inquiries about data science, analytics, machine learning, and DataLume.
+3. Natural Language Understanding: Always tolerate typos, grammatical mistakes, abbreviations, and informal phrasing (e.g., "wht is my datset", "calcualte avg reveue", "explian pg 2"). Never reject a query because of spelling or grammar; infer the intent gracefully.
+4. Grounded Dataset & Document Intelligence:
+   - When dataset or PDF document context is provided, answer accurately using the real facts, text, extracted tables, and statistical summaries provided in the prompt.
+   - For calculated numbers, rely on the grounded calculations provided in the prompt. NEVER hallucinate or invent numbers that contradict the data.
+   - When answering questions about PDF documents, cite page numbers where relevant (e.g. "[Page 2]").
+   - If a requested piece of information is NOT in the document or dataset, state that clearly instead of fabricating an answer.
 5. Without Dataset:
-   - When no dataset is uploaded, warmly assist the user, answer data science / analytics / business questions, and explain what DataLume can do once they upload their CSV or Excel file.
+   - When no dataset or document is uploaded, warmly assist the user, answer data science / analytics / business questions, and explain what DataLume can do once they upload their CSV, Excel, or PDF file.
 6. Tone: Professional yet conversational, helpful, concise, well-structured, and clear. Format answers with clean markdown when useful (bullet points, bold key figures). Do NOT produce raw markdown tables unless specifically requested. Keep answers crisp and readable."""
 
 
@@ -46,7 +47,7 @@ def get_gemini_config() -> tuple[str | None, str]:
 
 def build_dataset_summary(frame: pd.DataFrame | None, dataset_name: str | None = None) -> str:
     if frame is None or frame.empty:
-        return "No dataset is currently uploaded or selected."
+        return "No tabular dataset is currently loaded."
 
     stats = statistics(frame)
     meta = stats.get("metadata", {})
@@ -86,9 +87,40 @@ def build_dataset_summary(frame: pd.DataFrame | None, dataset_name: str | None =
     return "\n\n".join(summary_parts)
 
 
+def build_pdf_document_summary(doc_context: dict[str, Any] | None) -> str | None:
+    if not doc_context:
+        return None
+
+    meta = doc_context.get("metadata", {})
+    text_content = doc_context.get("document_text", "")
+    tables = doc_context.get("tables", [])
+
+    parts = [
+        f"DOCUMENT TYPE: PDF Document",
+        f"TITLE: {meta.get('title', 'Document')}",
+        f"TOTAL PAGES: {meta.get('total_pages', 1)} (Processed: {meta.get('processed_pages', 1)})",
+        f"WORD COUNT: {meta.get('word_count', 0):,}",
+        f"EXTRACTED TABLES DETECTED: {len(tables)}",
+    ]
+
+    if tables:
+        t_descriptions = [f"- {t['name']} on Page {t['page']} with columns: {', '.join(t['columns'][:8])}" for t in tables[:5]]
+        parts.append("TABLES FOUND IN PDF:\n" + "\n".join(t_descriptions))
+
+    # Include first ~3000 words or ~12000 chars of extracted text for fast, relevant context
+    if text_content:
+        snippet = text_content[:12000]
+        if len(text_content) > 12000:
+            snippet += "\n...[Document continues]..."
+        parts.append(f"EXTRACTED DOCUMENT TEXT CONTENT:\n{snippet}")
+
+    return "\n\n".join(parts)
+
+
 async def ask_gemini(
     question: str,
     dataset_context: str | None = None,
+    document_context: str | None = None,
     history: list[dict[str, str]] | None = None,
     calculated_facts: dict[str, Any] | None = None,
 ) -> str | None:
@@ -96,27 +128,25 @@ async def ask_gemini(
     if not api_key:
         return None
 
-    # Construct conversation contents for Gemini REST API
     contents: list[dict[str, Any]] = []
 
-    # Inject system instruction & context in system instruction or initial prompt
     system_part = SYSTEM_INSTRUCTION
+    if document_context:
+        system_part += f"\n\nCURRENT PDF DOCUMENT CONTEXT:\n{document_context}"
     if dataset_context:
-        system_part += f"\n\nCURRENT DATASET CONTEXT:\n{dataset_context}"
+        system_part += f"\n\nCURRENT TABULAR DATASET CONTEXT:\n{dataset_context}"
     if calculated_facts:
         system_part += f"\n\nGROUNDED EXACT CALCULATIONS FOR THIS QUESTION:\n{calculated_facts}"
 
-    # Previous turns (if any)
+    # Previous turns
     if history:
-        for turn in history[-6:]:  # Keep recent turns
+        for turn in history[-6:]:
             role = "user" if turn.get("role") == "user" else "model"
             content = turn.get("content", "")
             if content:
                 contents.append({"role": role, "parts": [{"text": content}]})
 
-    # Current user turn
-    user_prompt = question
-    contents.append({"role": "user", "parts": [{"text": user_prompt}]})
+    contents.append({"role": "user", "parts": [{"text": question}]})
 
     payload = {
         "system_instruction": {
@@ -124,15 +154,15 @@ async def ask_gemini(
         },
         "contents": contents,
         "generationConfig": {
-            "temperature": 0.4,
-            "maxOutputTokens": 1024,
+            "temperature": 0.3,
+            "maxOutputTokens": 1200,
         }
     }
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             res = await client.post(url, json=payload)
             if res.status_code == 200:
                 data = res.json()
@@ -153,9 +183,10 @@ async def answer_with_lumi(
     question: str,
     frame: pd.DataFrame | None = None,
     dataset_name: str | None = None,
+    pdf_context: dict[str, Any] | None = None,
     history: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Unified conversational AI handler combining Gemini LLM intelligence with deterministic analytics."""
+    """Unified conversational AI handler combining Gemini LLM intelligence with deterministic analytics and PDF intelligence."""
     facts: dict[str, Any] = {}
     deterministic_result: dict[str, Any] | None = None
 
@@ -166,12 +197,14 @@ async def answer_with_lumi(
         except Exception:
             deterministic_result = None
 
-    dataset_summary = build_dataset_summary(frame, dataset_name) if frame is not None else None
+    dataset_summary = build_dataset_summary(frame, dataset_name) if frame is not None and not frame.empty else None
+    document_summary = build_pdf_document_summary(pdf_context)
 
-    # Call Gemini with context and grounded facts
+    # Call Gemini with context, document text, and grounded facts
     gemini_answer = await ask_gemini(
         question=question,
         dataset_context=dataset_summary,
+        document_context=document_summary,
         history=history,
         calculated_facts=facts if facts else None,
     )
@@ -183,13 +216,22 @@ async def answer_with_lumi(
             "kind": "conversational_ai",
         }
 
-    # Fallback to deterministic analytics if Gemini is unreachable/unconfigured
+    # Fallback to deterministic analytics if Gemini is unreachable/unconfigured and we have a frame
     if deterministic_result:
         return deterministic_result
 
-    # Default fallback when no dataset and Gemini is unavailable
+    # If PDF context is present but Gemini failed, summarize document locally
+    if pdf_context:
+        meta = pdf_context.get("metadata", {})
+        tables = pdf_context.get("tables", [])
+        return {
+            "answer": f"Uploaded PDF: **{meta.get('title', 'Document')}** ({meta.get('total_pages', 1)} pages, {meta.get('word_count', 0)} words, {len(tables)} tables detected). You can ask questions about its content or explore extracted tables in Data Explorer!",
+            "facts": {"pages": meta.get("total_pages"), "word_count": meta.get("word_count"), "tables": len(tables)},
+            "kind": "document_summary",
+        }
+
     return {
-        "answer": "Hello! I am Lumi, your AI Data Assistant. Please upload a dataset (CSV or Excel) to explore insights, statistics, and charts!",
+        "answer": "Hello! I am Lumi, your AI Data & Document Assistant. Please upload a dataset or document (CSV, Excel, or PDF) to explore insights, statistics, and charts!",
         "facts": {},
         "kind": "fallback",
     }

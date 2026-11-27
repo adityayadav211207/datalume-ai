@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from .ai import answer_with_lumi
 from .analytics import answer_question, filtered, kpis, metadata, statistics
+from .pdf_engine import extract_pdf_document
 
 app = FastAPI(title="DataLume AI API", version="1.0.0")
 frontend_origins = [
@@ -133,8 +134,12 @@ async def load_owned_dataset(dataset_id: str, user: dict[str, str]) -> dict[str,
     content = stored.content
     try:
         extension = record["file_type"]
-        frame = pd.read_csv(io.BytesIO(content), nrows=500_001) if extension == "csv" else pd.read_excel(
-            io.BytesIO(content), nrows=500_001, engine="openpyxl" if extension == "xlsx" else "xlrd")
+        if extension == "pdf":
+            pdf_info = extract_pdf_document(content)
+            frame = pdf_info["primary_df"] if pdf_info["primary_df"] is not None else pd.DataFrame([{"Document": record["name"], "Pages": pdf_info["metadata"]["total_pages"], "Words": pdf_info["metadata"]["word_count"]}])
+        else:
+            frame = pd.read_csv(io.BytesIO(content), nrows=500_001) if extension == "csv" else pd.read_excel(
+                io.BytesIO(content), nrows=500_001, engine="openpyxl" if extension == "xlsx" else "xlrd")
     except Exception as exc:
         raise HTTPException(422, "The stored dataset could not be parsed.") from exc
     if len(frame) > 500_000:
@@ -206,8 +211,8 @@ async def upload_dataset(file: UploadFile = File(...), user: dict[str, str] = De
     if not filename or filename in {".", ".."} or len(filename) > 180:
         raise HTTPException(400, "Invalid dataset filename.")
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if extension not in {"csv", "xlsx", "xls"}:
-        raise HTTPException(415, "Upload a CSV, XLSX, or XLS dataset.")
+    if extension not in {"csv", "xlsx", "xls", "pdf"}:
+        raise HTTPException(415, "Upload a CSV, XLSX, XLS, or PDF dataset.")
     content = await file.read(MAX_BYTES + 1)
     if not content or len(content) > MAX_BYTES:
         raise HTTPException(413, f"File must be non-empty and no larger than {MAX_BYTES // (1024 * 1024)} MB.")
@@ -215,11 +220,12 @@ async def upload_dataset(file: UploadFile = File(...), user: dict[str, str] = De
     allowed_mimes = {
         "text/csv", "application/csv", "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/pdf", "application/x-pdf", "application/acrobat",
         "application/octet-stream", "text/plain", "text/x-csv",
         "application/x-csv", "text/comma-separated-values", "application/excel",
         "application/x-excel", ""
     }
-    if mime and mime not in allowed_mimes and not any(k in mime for k in ("csv", "excel", "sheet", "text", "octet-stream")):
+    if mime and mime not in allowed_mimes and not any(k in mime for k in ("csv", "excel", "sheet", "pdf", "text", "octet-stream")):
         raise HTTPException(415, "The declared content type is not supported.")
     if extension == "xlsx" and not content.startswith(b"PK\x03\x04"):
         raise HTTPException(400, "The file does not have a valid XLSX signature.")
@@ -227,15 +233,42 @@ async def upload_dataset(file: UploadFile = File(...), user: dict[str, str] = De
         raise HTTPException(400, "The file does not have a valid XLS signature.")
     if extension == "csv" and b"\x00" in content[:4096]:
         raise HTTPException(400, "The file does not have a valid CSV text signature.")
+    if extension == "pdf" and not content.startswith(b"%PDF-"):
+        raise HTTPException(400, "The file does not have a valid PDF header signature.")
+
+    pdf_info: dict[str, Any] | None = None
     try:
         if extension == "csv":
             if b"\x00" in content[:4096]:
                 raise ValueError("Binary content is not a CSV.")
             frame = pd.read_csv(io.BytesIO(content), nrows=500_001)
+        elif extension == "pdf":
+            try:
+                pdf_info = extract_pdf_document(content)
+            except ValueError as ve:
+                raise HTTPException(400, str(ve))
+            except Exception as pe:
+                raise HTTPException(400, f"Could not process PDF: {pe}")
+
+            # If a primary structured table was detected, use it as active analytical frame
+            if pdf_info["primary_df"] is not None and not pdf_info["primary_df"].empty:
+                frame = pdf_info["primary_df"]
+            else:
+                # Text/document view: create document summary frame
+                doc_summary = [
+                    {"Metric": "Document Name", "Value": str(filename)},
+                    {"Metric": "Document Type", "Value": str(pdf_info["doc_type"]).replace("_", " ").title()},
+                    {"Metric": "Total Pages", "Value": str(pdf_info["metadata"]["total_pages"])},
+                    {"Metric": "Word Count", "Value": str(pdf_info["metadata"]["word_count"])},
+                    {"Metric": "Detected Tables", "Value": str(len(pdf_info["tables"]))},
+                ]
+                frame = pd.DataFrame(doc_summary)
         else:
             frame = pd.read_excel(io.BytesIO(content), nrows=500_001, engine="openpyxl" if extension == "xlsx" else None)
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(400, "The file could not be parsed. Check that it is a valid CSV or Excel workbook.") from exc
+        raise HTTPException(400, "The file could not be parsed. Check that it is a valid CSV, Excel workbook, or readable PDF.") from exc
     if len(frame) > 500_000:
         raise HTTPException(413, "A maximum of 500,000 rows is supported per upload.")
     if frame.columns.duplicated().any():
@@ -250,8 +283,31 @@ async def upload_dataset(file: UploadFile = File(...), user: dict[str, str] = De
     dataset_id = str(uuid.uuid4())
     details = metadata(frame)
     await persist_upload(user, dataset_id, filename, content, extension, details)
-    DATASETS[dataset_id] = {"user_id": user["id"], "name": filename, "frame": frame, "source": content, "file_type": extension}
-    return {"id": dataset_id, "name": filename, "metadata": details, "statistics": statistics(frame), "kpis": kpis(frame)}
+    DATASETS[dataset_id] = {
+        "user_id": user["id"],
+        "name": filename,
+        "frame": frame,
+        "source": content,
+        "file_type": extension,
+        "pdf_info": pdf_info,
+    }
+    response_payload = {
+        "id": dataset_id,
+        "name": filename,
+        "metadata": details,
+        "statistics": statistics(frame),
+        "kpis": kpis(frame),
+        "file_type": extension,
+    }
+    if pdf_info:
+        response_payload["pdf_info"] = {
+            "doc_type": pdf_info["doc_type"],
+            "metadata": pdf_info["metadata"],
+            "tables": pdf_info["tables"],
+            "can_combine_tables": pdf_info["can_combine_tables"],
+            "document_text_snippet": pdf_info["document_text"][:2000],
+        }
+    return response_payload
 
 
 @app.get("/api/datasets")
@@ -409,6 +465,38 @@ async def query_dataset(dataset_id: str, request: QueryRequest, user: dict[str, 
             "total": len(frame), "page": request.page, "page_size": request.page_size, "columns": list(frame.columns)}
 
 
+@app.post("/api/datasets/{dataset_id}/select-table")
+async def select_pdf_table(dataset_id: str, payload: dict[str, Any], user: dict[str, str] = Depends(current_user)) -> dict[str, Any]:
+    dataset = await load_owned_dataset(dataset_id, user)
+    pdf_info = dataset.get("pdf_info")
+    if not pdf_info or not pdf_info.get("table_dfs"):
+        raise HTTPException(400, "This dataset does not contain selectable PDF tables.")
+
+    table_id = payload.get("table_id")
+    combine_all = payload.get("combine_all", False)
+
+    if combine_all and pdf_info.get("can_combine_tables"):
+        combined_df = pd.concat(pdf_info["table_dfs"], ignore_index=True)
+        dataset["frame"] = combined_df
+    elif table_id:
+        idx = next((i for i, t in enumerate(pdf_info["tables"]) if t["id"] == table_id), None)
+        if idx is None or idx >= len(pdf_info["table_dfs"]):
+            raise HTTPException(404, "Selected table not found.")
+        dataset["frame"] = pdf_info["table_dfs"][idx]
+    else:
+        raise HTTPException(400, "Must provide table_id or combine_all.")
+
+    frame = dataset["frame"]
+    details = metadata(frame)
+    return {
+        "id": dataset_id,
+        "name": dataset["name"],
+        "metadata": details,
+        "statistics": statistics(frame),
+        "kpis": kpis(frame),
+    }
+
+
 @app.post("/api/datasets/{dataset_id}/chat")
 async def chat_dataset(dataset_id: str, request: ChatRequest, user: dict[str, str] = Depends(current_user)) -> dict[str, Any]:
     dataset = await load_owned_dataset(dataset_id, user)
@@ -421,6 +509,7 @@ async def chat_dataset(dataset_id: str, request: ChatRequest, user: dict[str, st
         question=request.question,
         frame=frame,
         dataset_name=dataset.get("name") or dataset.get("original_filename"),
+        pdf_context=dataset.get("pdf_info"),
         history=history,
     )
 
@@ -429,11 +518,13 @@ async def chat_dataset(dataset_id: str, request: ChatRequest, user: dict[str, st
 async def chat_general(request: ChatRequest, user: dict[str, str] = Depends(current_user)) -> dict[str, Any]:
     frame = None
     dataset_name = None
+    pdf_info = None
     if request.dataset_id:
         try:
             dataset = await load_owned_dataset(request.dataset_id, user)
             frame = filtered(dataset["frame"], request.filters)
             dataset_name = dataset.get("name") or dataset.get("original_filename")
+            pdf_info = dataset.get("pdf_info")
         except Exception:
             pass
 
@@ -446,6 +537,7 @@ async def chat_general(request: ChatRequest, user: dict[str, str] = Depends(curr
         question=request.question,
         frame=frame,
         dataset_name=dataset_name,
+        pdf_context=pdf_info,
         history=history,
     )
 
