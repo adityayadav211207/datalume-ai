@@ -204,11 +204,20 @@ export function useDatasets(
 
   const dropzone = useDropzone({
     onDrop,
+    onDropRejected: fileRejections => {
+      const first = fileRejections[0]
+      if (first) {
+        const errorMsg = first.errors[0]?.message || 'File format not supported'
+        showNotice(`Upload rejected: ${first.file.name} (${errorMsg})`)
+      }
+    },
     accept: {
-      'text/csv': ['.csv'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/vnd.ms-excel': ['.xls'],
-      'application/pdf': ['.pdf'],
+      'text/csv': ['.csv', '.CSV'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.XLSX'],
+      'application/vnd.ms-excel': ['.xls', '.XLS'],
+      'application/pdf': ['.pdf', '.PDF'],
+      'application/x-pdf': ['.pdf', '.PDF'],
+      'application/acrobat': ['.pdf', '.PDF'],
     },
     maxFiles: 1,
     disabled: busy,

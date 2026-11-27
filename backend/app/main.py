@@ -169,7 +169,7 @@ async def persist_upload(user: dict[str, str], dataset_id: str, name: str, conte
     async with httpx.AsyncClient(timeout=30) as client:
         # 1. Upload file to Supabase storage bucket user-datasets
         try:
-            mime = "text/csv" if file_type == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime = "text/csv" if file_type == "csv" else "application/pdf" if file_type == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             upload_headers = {**headers, "Content-Type": mime, "x-upsert": "true"}
             await client.post(
                 f"{url.rstrip('/')}/storage/v1/object/user-datasets/{storage_path}",
@@ -233,7 +233,7 @@ async def upload_dataset(file: UploadFile = File(...), user: dict[str, str] = De
         raise HTTPException(400, "The file does not have a valid XLS signature.")
     if extension == "csv" and b"\x00" in content[:4096]:
         raise HTTPException(400, "The file does not have a valid CSV text signature.")
-    if extension == "pdf" and not content.startswith(b"%PDF-"):
+    if extension == "pdf" and b"%PDF-" not in content[:1024]:
         raise HTTPException(400, "The file does not have a valid PDF header signature.")
 
     pdf_info: dict[str, Any] | None = None

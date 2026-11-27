@@ -111,7 +111,7 @@ def extract_pdf_document(
     content: bytes, max_pages: int = 50
 ) -> dict[str, Any]:
     """Inspects, classifies, and extracts tables, text, and metadata from a PDF file."""
-    if not content.startswith(b"%PDF-"):
+    if b"%PDF-" not in content[:1024]:
         raise ValueError("Invalid PDF signature. File is not a valid PDF document.")
 
     if check_pdf_encrypted(content):
