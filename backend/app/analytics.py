@@ -54,18 +54,104 @@ def statistics(frame: pd.DataFrame) -> dict[str, Any]:
 
 def kpis(frame: pd.DataFrame) -> list[dict[str, Any]]:
     cards = [{"label": "Records", "value": len(frame), "column": None, "calculation": "Row count"}]
-    for name in frame.select_dtypes(include="number").columns[:3]:
-        label = re.sub(r"[_-]+", " ", str(name)).title()
+
+    revenue_keywords = ("revenue", "sales", "turnover", "gmv", "income", "earning")
+    cost_keywords = ("approx_cost", "cost", "price", "amount", "spend", "bill", "expense", "fee", "charge", "fare", "budget", "total")
+    profit_keywords = ("profit", "margin", "gain")
+
+    found_financial = False
+
+    # 1. Check explicit revenue / sales columns first
+    for name in frame.columns:
+        lname = str(name).lower()
+        if any(kw in lname for kw in revenue_keywords) and pd.api.types.is_numeric_dtype(frame[name]):
+            clean_label = re.sub(r"[_-]+", " ", str(name)).title()
+            cards.insert(1, {
+                "label": f"Total {clean_label}" if "total" not in lname else clean_label,
+                "value": safe_value(frame[name].sum()),
+                "column": str(name),
+                "calculation": f"Sum of {name}"
+            })
+            found_financial = True
+            break
+
+    # 2. Check cost / approx_cost / price / spend columns (e.g. Zomato approx_cost)
+    if not found_financial:
+        for name in frame.columns:
+            lname = str(name).lower()
+            if any(kw in lname for kw in cost_keywords) and pd.api.types.is_numeric_dtype(frame[name]):
+                clean_label = re.sub(r"[_-]+", " ", str(name)).title()
+                if "approx" in lname or "cost" in lname:
+                    display_label = "Total Revenue (Approx Cost)" if "approx" in lname else f"Total {clean_label}"
+                else:
+                    display_label = f"Total {clean_label}" if "total" not in lname else clean_label
+
+                cards.insert(1, {
+                    "label": display_label,
+                    "value": safe_value(frame[name].sum()),
+                    "column": str(name),
+                    "calculation": f"Sum of {name}"
+                })
+                found_financial = True
+                break
+
+    # 3. Check profit / margin columns
+    for name in frame.columns:
+        lname = str(name).lower()
+        if any(kw in lname for kw in profit_keywords) and pd.api.types.is_numeric_dtype(frame[name]):
+            clean_label = re.sub(r"[_-]+", " ", str(name)).title()
+            cards.append({
+                "label": f"Total {clean_label}" if "total" not in lname else clean_label,
+                "value": safe_value(frame[name].sum()),
+                "column": str(name),
+                "calculation": f"Sum of {name}"
+            })
+            break
+
+    # 4. Check rating / score column (including format like "4.1/5")
+    for name in frame.columns:
+        lname = str(name).lower()
+        if any(kw in lname for kw in ("rate", "rating", "score")):
+            if not pd.api.types.is_numeric_dtype(frame[name]):
+                try:
+                    extracted = frame[name].astype(str).str.extract(r"([\d\.]+)", expand=False)
+                    parsed = pd.to_numeric(extracted, errors="coerce").dropna()
+                    if len(parsed) and parsed.mean() <= 10:
+                        cards.append({
+                            "label": "Average Rating",
+                            "value": round(float(parsed.mean()), 2),
+                            "column": str(name),
+                            "calculation": f"Mean of extracted {name} (out of 5)"
+                        })
+                        break
+                except Exception:
+                    pass
+            else:
+                cards.append({
+                    "label": "Average Rating",
+                    "value": safe_value(frame[name].dropna().mean()),
+                    "column": str(name),
+                    "calculation": f"Mean of {name}"
+                })
+                break
+
+    # 5. Add averages for other numeric columns
+    for name in frame.select_dtypes(include="number").columns:
+        if len(cards) >= 4:
+            break
+        # Skip if column is already used for Total card
+        if any(c.get("column") == str(name) and "Total" in c.get("label", "") for c in cards):
+            continue
+        clean_label = re.sub(r"[_-]+", " ", str(name)).title()
         values = frame[name].dropna()
         if len(values):
-            cards.append({"label": f"Average {label}", "value": safe_value(values.mean()),
-                          "column": str(name), "calculation": f"Mean of {name}"})
-    for name in frame.columns:
-        if any(word in str(name).lower() for word in ("revenue", "sales", "profit", "total")) and pd.api.types.is_numeric_dtype(frame[name]):
-            cards.insert(1, {"label": f"Total {str(name).replace('_', ' ').title()}",
-                             "value": safe_value(frame[name].sum()), "column": str(name),
-                             "calculation": f"Sum of {name}"})
-            break
+            cards.append({
+                "label": f"Average {clean_label}",
+                "value": safe_value(values.mean()),
+                "column": str(name),
+                "calculation": f"Mean of {name}"
+            })
+
     return cards[:4]
 
 
